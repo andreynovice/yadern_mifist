@@ -1,0 +1,42 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+.env
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Модели и веса
+*.pt
+*.pth
+*.onnx
+*.engine
+*.ckpt
+
+# Видео и медиа
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+videos/
+videos_*/
+*.mp3
+*.wav
+
+# Результаты / выходы
+outputs*/
+rendered*/
+runs/
+results/
+*.log
+
+# Данные
+data/
+datasets/

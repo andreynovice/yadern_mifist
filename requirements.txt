@@ -1,0 +1,11 @@
+numpy==2.5.4
+opencv-python==4.10.0.84
+Pillow==13.0.0
+torch==2.15.0
+torchvision==0.29.2
+ultralytics==8.4.203
+torchreid==0.2.5
+scipy==1.18.1
+gdown==6.5.1
+yacs==0.1.8
+tensorboard==2.21.0
