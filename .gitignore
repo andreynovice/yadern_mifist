@@ -35,6 +35,7 @@ outputs*/
 rendered*/
 runs/
 results/
+embeddings_smoke/
 *.log
 
 # Данные
