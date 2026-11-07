@@ -1,72 +1,99 @@
-# Межкамерный трекинг людей
+# Трекинг людей по видео
 
-Офлайн-прототип для пяти видео из папки videos. Он использует YOLO для обнаружения людей, однокамерный Deep SORT, признаки внешности OSNet и затем объединяет сегменты в глобальные ID.
-
-## Файлы
-
-- analyze.py — основной анализ, однокамерный Deep SORT с OSNet Re-ID, экспорт report.json и tracks.csv.
-- render.py — видео с рамками и глобальными ID.
-- app.py — простой просмотрщик; требует доработки под текущие пути и выбор трека.
-- detect_render.py — отдельный эксперимент с YOLO и IoU.
-- videos — входные видео; yolo11m.pt — YOLO; last.pt автоматически не используется.
-- outputs_fixed и rendered_fixed — старые результаты, их нужно пересчитать.
-- ТЗ на хакатон_v2.docx.md — требования задачи.
-
-## Как происходит объединение
-
-Для каждой камеры YOLO оставляет только person. Детекции связываются однокамерным Deep SORT: используется калмановский прогноз, венгерское сопоставление и appearance metric. В appearance metric передаются embedding OSNet. Для сегмента сохраняются рамки, время и средние признаки.
-
-При запуске с YOLO создаётся настоящий OSNet osnet_x1_0 через torchreid. OSNet выдаёт embedding crop человека; нормализованный embedding используется и внутри Deep SORT, и для межкамерного сравнения. HSV используется только при запуске с --no-reid. Сегменты короче трёх обработанных детекций отбрасываются. Сегменты разных камер объединяются при пересечении времени или разрыве до --gap и сходстве не ниже 0.58. Карты допустимых переходов пока нет.
+Проект находит людей YOLO, строит локальные треки Deep SORT с OSNet Re-ID и сохраняет report.json, tracks.csv и видео с рамками.
 
 ## Установка
 
+PowerShell:
+
+    cd C:\Users\danii\projects\test
     py -3.12 -m venv .venv
-    .venv\\Scripts\\python -m pip install --upgrade pip
-    .venv\\Scripts\\python -m pip install -r requirements.txt
+    .venv\Scripts\python -m pip install --upgrade pip
+    .venv\Scripts\python -m pip install -r requirements.txt
 
-При первом запуске torchreid скачает веса OSNet. Проверено: OSNet, YOLO и OpenCV работают на CPU. Для CUDA установите подходящий PyTorch и передайте --device cuda.
+При первом запуске OSNet скачает свои веса. CPU поддерживается. Для GPU нужен CUDA PyTorch и параметр --device cuda.
 
-## Анализ
+## Основной запуск
 
-    .venv\\Scripts\\python analyze.py --videos videos --output outputs_osnet --model yolo11m.pt --step 5 --conf 0.15 --imgsz 1280 --gap 8 --device cpu
+Из корня проекта:
 
-Быстрый smoke-тест:
+    .venv\Scripts\python analyze.py --videos videos --output outputs_osnet --model yolo11m.pt --step 5 --conf 0.15 --imgsz 1280 --gap 8 --device cpu
 
-    .venv\\Scripts\\python analyze.py --videos videos --output outputs_smoke --model yolo11m.pt --step 25 --max-frames 250 --device cpu
+Результат:
 
-HSV baseline запускается с параметром --no-reid. В report.json при OSNet должны быть reid: osnet_x1_0 и reid_device. Поле cameras[].frames содержит реальное число кадров.
+    outputs_osnet\report.json
+    outputs_osnet\tracks.csv
 
-## Визуализация
+Для videos_proms:
 
-    .venv\\Scripts\\python render.py --videos videos --report outputs_osnet\\report.json --output rendered_osnet --hold 0
+    .venv\Scripts\python analyze.py --videos videos_proms --output outputs_proms --model yolo11m.pt --step 5 --conf 0.15 --imgsz 1280 --gap 8 --device cpu
 
-По умолчанию параметр --hold равен 0: рамка рисуется только на кадре, который записан в report.json. Это не создаёт залипание рамки между детекциями. Значение --hold больше нуля можно включить явно, если нужен временный fallback между редкими детекциями. Старые outputs_fixed и rendered_fixed получены до текущих изменений.
+В этой папке находится camera_4_lots.mp4. Если нужна только она, создайте папку с одним файлом:
 
-## Уже исправлено
+    New-Item -ItemType Directory -Force input_camera4
+    Copy-Item videos_proms\camera_4_lots.mp4 input_camera4\
+    .venv\Scripts\python analyze.py --videos input_camera4 --output outputs_camera4 --model yolo11m.pt --step 5 --device cpu
 
-- Подключён настоящий OSNet; отсутствие зависимости больше не скрывается HSV fallback.
-- В отчёт записывается Re-ID модель.
-- Исправлен подсчёт кадров до release().
-- Добавлена проверка пустой папки видео.
-- Добавлен requirements.txt с версиями.
+## Быстрый тест
 
-## Что ещё нужно исправить
+    .venv\Scripts\python analyze.py --videos videos_proms --output outputs_smoke --model yolo11m.pt --step 10 --max-frames 120 --imgsz 640 --device cpu
 
-1. Добавить допустимые переходы между камерами, направление и время перехода.
-2. Сравнить Deep SORT с Hybrid-SORT-ReID на размеченных однокамерных сценах.
-3. Калибровать max_age, n_init, cosine distance, пороги OSNet и gap; 0.58 пока эвристика.
-4. Учесть разные FPS: камера 4 имеет 20 FPS, остальные 25.
-5. Переделать app.py: пять камер, динамический масштаб, выбор global_id, список камер и времени.
-6. Добавить план офиса и предполагаемые переходы.
-7. Добавить разметку и метрики IDF1, HOTA, precision/recall.
-8. Пересчитать outputs_fixed и rendered_fixed после Deep SORT + OSNet.
+В report.json проверьте reid=osnet_x1_0, reid_device=cpu или cuda и правильное cameras[].frames.
+
+## Отрисовка
+
+После анализа используйте тот же каталог videos и соответствующий report:
+
+    .venv\Scripts\python render.py --videos videos --report outputs_osnet\report.json --output rendered_osnet --hold 0
+
+Для camera_4:
+
+    .venv\Scripts\python render.py --videos input_camera4 --report outputs_camera4\report.json --output rendered_camera4 --hold 0
+
+Результат — MP4 в указанной папке. hold=0 рисует bbox только на кадрах, сохранённых в отчёте. hold=5 удерживает bbox ещё пять кадров и влияет только на видео, не на жизнь трека.
+
+## Параметры analyze.py
+
+| Параметр | Смысл |
+|---|---|
+| --videos | Папка входных MP4 |
+| --output | Папка report.json и tracks.csv |
+| --model | Путь к YOLO-весам, обычно yolo11m.pt |
+| --step | Каждый N-й кадр: 1 точнее, 5 быстрее |
+| --conf | Минимальная уверенность YOLO; меньше даёт больше ложных детекций |
+| --imgsz | Размер входа YOLO; больше точнее для мелких людей, но медленнее |
+| --gap | Максимальный временной разрыв для межкамерного объединения, секунды |
+| --max-frames | Лимит кадров на файл; 0 означает весь файл |
+| --device | cpu или cuda |
+| --no-reid | Отключает OSNet для baseline-сравнения |
+
+## Параметры render.py
+
+| Параметр | Смысл |
+|---|---|
+| --videos | Та же папка, что была указана при анализе |
+| --report | Путь к report.json |
+| --output | Папка итоговых MP4 |
+| --hold | Сколько следующих кадров удерживать bbox; по умолчанию 0 |
+
+## Что делает код
+
+YOLO оставляет класс person. OSNet строит embedding внешности. Deep SORT с калмановским прогнозом и сопоставлением детекций создаёт локальный ID внутри камеры. После минимум трёх подтверждённых обновлений сегмент сохраняется. Сегменты разных камер объединяются по времени и похожести OSNet.
+
+Три обновления означают три обработанных кадра. При step=5 это примерно 0.6 секунды при 25 FPS. Поэтому короткие появления могут быть удалены. Для короткой сцены используйте step=1 или step=2.
 
 ## Проверка
 
-Сначала запустите smoke-тест. Убедитесь, что report.json создан, reid равен osnet_x1_0, а frames для текущих файлов равны 4503, 4504, 4503, 3601 и 4504. Затем обработайте полный набор и просмотрите tracks.csv и rendered_osnet.
+    $env:PYTHONDONTWRITEBYTECODE="1"
+    .venv\Scripts\python -m py_compile analyze.py render.py detect_render.py app.py
 
-Отдельно проверьте переход одного человека, пересечение людей, временное закрытие, выход из всех камер и похожую одежду. Сравните ID с ручной разметкой. Убедитесь, что короткая случайная детекция не попадает в tracks.csv: фильтр оставляет только сегменты минимум из трёх обработанных кадров. total_tracks нельзя считать точным без этой проверки.
+Проверьте видео на сценах с пересечением людей, пропусками детектора, похожей одеждой и переходом между камерами. Сначала смотрите tracks.csv, затем rendered_*. Число total_tracks нельзя считать точным без ручной разметки.
 
-## Ограничения
+## Ограничения и следующие задачи
 
-Алгоритм офлайн, не использует план и не дообучает OSNet. Фильтр трёх детекций может удалить очень короткое реальное появление человека. Межкамерные переходы пока ограничены общим временным окном. Это рабочая база, требующая калибровки.
+- локальный трекер Deep SORT; Hybrid-SORT пока не подключён;
+- нет карты разрешённых переходов между камерами;
+- OSNet не дообучен на этих камерах;
+- app.py пока экспериментальный;
+- разные FPS камер нужно учитывать при синхронном просмотре;
+- полный CPU-запуск может быть долгим.
