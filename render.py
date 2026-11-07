@@ -25,5 +25,7 @@ def render(videos,report,out,hold):
    writer.write(image);frame+=1
   cap.release();writer.release();print(out/f'{src.stem}_tracked.mp4',flush=True)
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--videos',default='videos');p.add_argument('--report',default='outputs_reid/report.json');p.add_argument('--output',default='rendered');p.add_argument('--hold',type=int,default=30);a=p.parse_args();render(a.videos,a.report,a.output,a.hold)
+ p=argparse.ArgumentParser();p.add_argument('--videos',default='videos');p.add_argument('--report',default='outputs_reid/report.json');p.add_argument('--output',default='rendered');p.add_argument('--hold',type=int,default=0,help='number of following frames to keep a box; default 0');a=p.parse_args();
+ if a.hold<0: p.error('--hold must be >= 0')
+ render(a.videos,a.report,a.output,a.hold)
 

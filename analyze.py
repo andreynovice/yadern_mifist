@@ -27,19 +27,23 @@ def appearance(frame,box):
  return cv2.normalize(value,value).flatten()
 def sim(a,b):return float(cv2.compareHist(a.astype(np.float32),b.astype(np.float32),cv2.HISTCMP_CORREL))
 class Tracker:
- def __init__(self):self.next_id=1;self.items={}
+ """Однокамерный Deep SORT. OSNet embedding передаётся в metric Deep SORT."""
+ def __init__(self, max_age=50, n_init=3):
+  from deep_sort_realtime.deepsort_tracker import DeepSort
+  self.tracker=DeepSort(max_age=max_age,n_init=n_init,max_cosine_distance=.35,nn_budget=100,embedder=None)
  def update(self,detections,frame,fps):
-  used=set(); result=[]
-  for d in detections:
-   best=None; best_cost=1e9
-   for tid,old in self.items.items():
-    if tid in used:continue
-    dt=max(1,frame-old['frame'])/fps; distance=math.hypot(d['center'][0]-old['center'][0],d['center'][1]-old['center'][1]); gate=max(100,old['size'][1]*(1.2+2.2*dt))
-    cost=distance/gate+.3*(1-sim(d['appearance'],old['appearance']))
-    if distance<gate and cost<best_cost:best,best_cost=tid,cost
-   if best is None:best=self.next_id;self.next_id+=1
-   used.add(best); tracked=dict(d,local_id=best);self.items[best]=dict(tracked,frame=frame);result.append(tracked)
-  self.items={k:v for k,v in self.items.items() if frame-v['frame']<=int(fps*2)};return result
+  raw=[([d['box'][0],d['box'][1],d['box'][2]-d['box'][0],d['box'][3]-d['box'][1]],d['score'],'person') for d in detections]
+  embeds=[d['reid'] if d.get('reid') is not None else d['appearance'] for d in detections]
+  tracks=self.tracker.update_tracks(raw,embeds=embeds)
+  result=[]
+  for track in tracks:
+   if not track.is_confirmed() or track.time_since_update>0:continue
+   box=tuple(map(int,track.to_ltrb(orig=True)))
+   if box[2]<=box[0] or box[3]<=box[1]:continue
+   feature=np.asarray(track.get_feature(),dtype=np.float32)
+   feature/=np.linalg.norm(feature)+1e-8
+   result.append({'box':box,'center':((box[0]+box[2])//2,(box[1]+box[3])//2),'size':(box[2]-box[0],box[3]-box[1]),'local_id':str(track.track_id),'score':track.det_conf or 0.0,'appearance':np.zeros(48,np.float32),'reid':feature})
+  return result
 
 def make_detector(model,conf,imgsz):
  if model:
@@ -61,7 +65,7 @@ def make_detector(model,conf,imgsz):
  return detect,'OpenCV MOG2 fallback'
 
 def process_camera(path,camera,detector,model,step,conf,max_frames,reid):
- cap=cv2.VideoCapture(str(path));fps=cap.get(cv2.CAP_PROP_FPS) or 25;tracker=Tracker();segments={};frame=0
+ cap=cv2.VideoCapture(str(path));fps=cap.get(cv2.CAP_PROP_FPS) or 25;tracker=Tracker(max_age=max(30,int(fps*2)),n_init=3);segments={};frame=0
  while frame<max_frames if max_frames else True:
   ok,image=cap.read()
   if not ok:break
@@ -71,8 +75,8 @@ def process_camera(path,camera,detector,model,step,conf,max_frames,reid):
   for x1,y1,x2,y2,score in raw:
    box=(x1,y1,x2,y2);detections.append({'box':box,'center':((x1+x2)//2,(y1+y2)//2),'size':(x2-x1,y2-y1),'appearance':appearance(image,box),'reid':reid.vector(image,box),'score':score})
   for item in tracker.update(detections,frame,fps):
-   key=item['local_id'];segment=segments.setdefault(key,{'camera':camera,'local_id':key,'start_time':frame/fps,'end_time':frame/fps,'frames':0,'appearances':[],'reids':[],'boxes':[]});segment['end_time']=frame/fps;segment['frames']+=1;segment['appearances'].append(item['appearance']);
-   if item.get('reid') is not None:segment['reids'].append(item['reid']);
+   key=item['local_id']; segment=segments.setdefault(key,{'camera':camera,'local_id':key,'start_time':frame/fps,'end_time':frame/fps,'frames':0,'appearances':[],'reids':[],'boxes':[]});segment['end_time']=frame/fps;segment['frames']+=1
+   segment['reids'].append(item['reid']);
    if len(segment['boxes'])<300:segment['boxes'].append({'camera':camera,'frame':frame,'box':list(item['box'])})
   frame+=1
  total_frames=int(cap.get(cv2.CAP_PROP_FRAME_COUNT));cap.release()
@@ -80,7 +84,8 @@ def process_camera(path,camera,detector,model,step,conf,max_frames,reid):
   segment['appearance']=np.mean(segment.pop('appearances'),axis=0) if segment['appearances'] else np.zeros(48,np.float32)
   segment['reid']=np.mean(segment.pop('reids'),axis=0) if segment['reids'] else None
   if segment['reid'] is not None:segment['reid']/=np.linalg.norm(segment['reid'])+1e-8
- return list(segments.values()),fps,total_frames
+ segments=[s for s in segments.values() if s['frames']>=3]
+ return segments,fps,total_frames
 
 def merge_segments(segments,gap):
  parent=list(range(len(segments))); members={i:[i] for i in range(len(segments))}
