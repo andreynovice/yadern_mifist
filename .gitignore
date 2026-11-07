@@ -13,7 +13,6 @@ env/
 Thumbs.db
 
 # Модели и веса
-*.pt
 *.pth
 *.onnx
 *.engine

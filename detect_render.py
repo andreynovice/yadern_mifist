@@ -33,7 +33,10 @@ def run(source,out,model,step,conf,imgsz,device,nms_iou):
     used.add(best);new[best]=((x1,y1,x2,y2),frame_no);current[current.index((x1,y1,x2,y2,score,None))]=(x1,y1,x2,y2,score,best)
    active={**{k:v for k,v in active.items() if frame_no-v[1]<=step*4},**new}
   raw_frame=frame.copy();tracked_frame=frame.copy();draw(raw_frame,current,(0,255,255),False);draw(tracked_frame,current,(0,220,80),True)
-  raw_writer.write(raw_frame);track_writer.write(tracked_frame);frame_no+=1
+  raw_writer.write(raw_frame), track_writer.write(tracked_frame)
+  frame_no += 1
+  if frame_no % 20 == 0:
+   print(f"Обработано: {frame_no}/{n} кадров ({frame_no/n*100:.1f}%)", flush=True)
  cap.release();raw_writer.release();track_writer.release();print(f'processed {n} frames -> {out}',flush=True)
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--source',default='videos_proms/camera_new_4 - Trim.mp4');p.add_argument('--output',default='videos_proms_results');p.add_argument('--model',default='yolo11m.pt');p.add_argument('--step',type=int,default=2);p.add_argument('--conf',type=float,default=.15);p.add_argument('--imgsz',type=int,default=1280);p.add_argument('--device',default='cpu');p.add_argument('--nms-iou',type=float,default=.4);a=p.parse_args();run(a.source,a.output,a.model,a.step,a.conf,a.imgsz,a.device,a.nms_iou)
