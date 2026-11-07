@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "source": "office_camera.png",
+    "coordinate_system": "pixels of the plan image, origin top-left, x to the right, y down",
+    "angle_convention": "degrees, 0 = +x (right), 90 = +y (down), clockwise on screen; north (up) = 270",
+    "scale_m_per_px": 0.027,
+    "scale_status": "ESTIMATE (door about 0.9 m is about 37 px). Replace with a measured value.",
+    "accuracy_note": "Positions, headings and FOV were read from the drawn red lines by eye: expect about 10-15 px and about 10 deg error."
+  },
+
+  "cameras": [
+    {
+      "id": 1,
+      "pos_px": [460, 253],
+      "heading_deg": 99,
+      "fov_deg": 65,
+      "range_px": 150,
+      "mount": "wall above the lobby entrance, looking south into the lobby",
+      "covers_zones": ["lobby"]
+    },
+    {
+      "id": 2,
+      "pos_px": [325, 402],
+      "heading_deg": 311,
+      "fov_deg": 68,
+      "range_px": 300,
+      "mount": "west wall corner of the lobby (next to the planters), looking north-east",
+      "covers_zones": ["lobby"]
+    },
+    {
+      "id": 3,
+      "pos_px": [610, 257],
+      "heading_deg": 99,
+      "fov_deg": 52,
+      "range_px": 350,
+      "mount": "north wall of the lobby, east side, looking south",
+      "covers_zones": ["lobby", "corridor_east"]
+    },
+    {
+      "id": 4,
+      "pos_px": [652, 712],
+      "heading_deg": 185,
+      "fov_deg": 50,
+      "range_px": 200,
+      "mount": "east wall of the corridor, looking west across the corridor",
+      "covers_zones": ["corridor_east", "passage_mid"]
+    },
+    {
+      "id": 5,
+      "pos_px": [603, 1105],
+      "heading_deg": 269,
+      "fov_deg": 39,
+      "range_px": 250,
+      "mount": "south end of the corridor, looking north",
+      "covers_zones": ["corridor_east", "corridor_south"]
+    }
+  ],
+
+  "zones": [
+    {
+      "id": "lobby",
+      "type": "hall",
+      "polygon_px": [[315, 262], [640, 262], [640, 380], [315, 380]]
+    },
+    {
+      "id": "corridor_east",
+      "type": "corridor",
+      "polygon_px": [[580, 380], [648, 380], [648, 920], [580, 920]]
+    },
+    {
+      "id": "passage_mid",
+      "type": "corridor",
+      "polygon_px": [[320, 695], [580, 695], [580, 745], [320, 745]]
+    },
+    {
+      "id": "corridor_south",
+      "type": "hall",
+      "polygon_px": [[580, 920], [1228, 920], [1228, 1100], [580, 1100]]
+    }
+  ],
+
+  "blind_zones": [
+    {"id": "offices_west", "note": "offices 337-342 along the west wall, not covered by any camera"},
+    {"id": "toilets", "note": "north of the lobby, entrances near cameras 1 and 3"},
+    {"id": "kitchen_rooms", "note": "rooms west of camera 4, only partially visible through the opening"},
+    {"id": "stairs", "note": "south part near camera 5, not covered"}
+  ],
+
+  "camera_graph": {
+    "overlaps": [
+      {"a": 1, "b": 2, "zone": "lobby"},
+      {"a": 1, "b": 3, "zone": "lobby"},
+      {"a": 2, "b": 3, "zone": "lobby"}
+    ],
+    "transitions": [
+      {
+        "from": 3, "to": 4,
+        "via": "corridor_east",
+        "gap_px": 350, "gap_m_est": 9.5,
+        "min_s": 4, "max_s": 40
+      },
+      {
+        "from": 4, "to": 5,
+        "via": "corridor_east",
+        "gap_px": 190, "gap_m_est": 5.1,
+        "min_s": 2, "max_s": 30
+      }
+    ],
+    "note": "Cameras 1, 2, 3 overlap in the lobby (association by world coordinates). 3->4->5 are sequential along the east corridor (association by ReID + travel time)."
+  }
+}

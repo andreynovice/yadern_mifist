@@ -1,0 +1,28 @@
+{
+  "coordinate_system": {
+    "units": "metres",
+    "origin": "first table corner",
+    "x_axis": "table width",
+    "y_axis": "table depth",
+    "z_axis": "up from floor"
+  },
+  "common": {
+    "focal_length": 1400.0,
+    "table_width": 2.74,
+    "table_depth": 1.525,
+    "table_height": 0.76,
+    "table_points": [
+      [689.0, 618.0],
+      [1603.0, 499.0],
+      [1888.0, 833.0],
+      [751.0, 1081.0]
+    ]
+  },
+  "cameras": {
+    "1": {},
+    "2": {},
+    "3": {},
+    "4": {},
+    "5": {}
+  }
+}
