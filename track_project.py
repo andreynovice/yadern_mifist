@@ -136,13 +136,84 @@ class LocalTracker:
                     "feature": feature,
                 }
             )
-        return output
+        return suppress_duplicate_boxes(output)
 
 
 def cosine(first: np.ndarray, second: np.ndarray) -> float:
     first = first / (np.linalg.norm(first) + 1e-8)
     second = second / (np.linalg.norm(second) + 1e-8)
     return float(np.dot(first, second))
+
+
+def box_iou(
+    first: tuple[int, int, int, int], second: tuple[int, int, int, int]
+) -> float:
+    first_x1, first_y1, first_x2, first_y2 = first
+    second_x1, second_y1, second_x2, second_y2 = second
+    intersection_x1 = max(first_x1, second_x1)
+    intersection_y1 = max(first_y1, second_y1)
+    intersection_x2 = min(first_x2, second_x2)
+    intersection_y2 = min(first_y2, second_y2)
+    intersection = max(0, intersection_x2 - intersection_x1) * max(
+        0, intersection_y2 - intersection_y1
+    )
+    first_area = max(1, first_x2 - first_x1) * max(1, first_y2 - first_y1)
+    second_area = max(1, second_x2 - second_x1) * max(
+        1, second_y2 - second_y1
+    )
+    return intersection / (first_area + second_area - intersection)
+
+
+def overlap_fraction(
+    first: tuple[int, int, int, int], second: tuple[int, int, int, int]
+) -> float:
+    first_x1, first_y1, first_x2, first_y2 = first
+    second_x1, second_y1, second_x2, second_y2 = second
+    intersection = max(0, min(first_x2, second_x2) - max(first_x1, second_x1)) * max(
+        0, min(first_y2, second_y2) - max(first_y1, second_y1)
+    )
+    first_area = max(1, first_x2 - first_x1) * max(1, first_y2 - first_y1)
+    second_area = max(1, second_x2 - second_x1) * max(
+        1, second_y2 - second_y1
+    )
+    return intersection / max(1, min(first_area, second_area))
+
+
+def likely_duplicate(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    first_box = first["box"]
+    second_box = second["box"]
+    first_score = float(first.get("score", 0.0))
+    second_score = float(second.get("score", 0.0))
+    if box_iou(first_box, second_box) >= 0.50:
+        return True
+    if min(first_score, second_score) >= 0.55:
+        return False
+    if overlap_fraction(first_box, second_box) < 0.18:
+        return False
+    first_width = max(1, first_box[2] - first_box[0])
+    second_width = max(1, second_box[2] - second_box[0])
+    first_height = max(1, first_box[3] - first_box[1])
+    second_height = max(1, second_box[3] - second_box[1])
+    first_center = ((first_box[0] + first_box[2]) / 2, (first_box[1] + first_box[3]) / 2)
+    second_center = (
+        (second_box[0] + second_box[2]) / 2,
+        (second_box[1] + second_box[3]) / 2,
+    )
+    return (
+        abs(first_center[0] - second_center[0])
+        <= 0.85 * max(first_width, second_width)
+        and abs(first_center[1] - second_center[1])
+        <= 0.65 * max(first_height, second_height)
+    )
+
+
+def suppress_duplicate_boxes(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected = []
+    for item in sorted(items, key=lambda value: value.get("score", 0.0), reverse=True):
+        if any(likely_duplicate(item, other) for other in selected):
+            continue
+        selected.append(item)
+    return selected
 
 
 def camera_matrix(
@@ -446,7 +517,16 @@ def detect(
         if x2 <= x1 or y2 <= y1:
             continue
         detections.append({"box": (x1, y1, x2, y2), "score": float(box.conf[0])})
-    return detections
+    return suppress_duplicate_boxes(
+        [
+            item
+            for item in detections
+            if item["score"] >= args.min_person_conf
+            and (item["box"][3] - item["box"][1])
+            / max(item["box"][2] - item["box"][0], 1)
+            >= args.min_person_aspect
+        ]
+    )
 
 
 def process_camera(
@@ -776,7 +856,7 @@ def merge_segments(
                 first_end = first.get("sync_end_time", first["end_time"])
                 second_start = second.get("sync_start_time", second["start_time"])
                 second_end = second.get("sync_end_time", second["end_time"])
-                if min(first_end, second_end) > max(first_start, second_start):
+                if min(first_end, second_end) >= max(first_start, second_start):
                     return False
         return state_path_compatible(
             graph,
@@ -1253,6 +1333,18 @@ def parse_args() -> argparse.Namespace:
         "--conf", type=float, default=0.15, help="Порог confidence YOLO"
     )
     parser.add_argument("--det-iou", type=float, default=0.5, help="IoU NMS YOLO")
+    parser.add_argument(
+        "--min-person-conf",
+        type=float,
+        default=0.45,
+        help="Минимальная confidence после YOLO для person-бокса",
+    )
+    parser.add_argument(
+        "--min-person-aspect",
+        type=float,
+        default=0.45,
+        help="Минимальное отношение высоты person-бокса к ширине",
+    )
     parser.add_argument("--imgsz", type=int, default=1280, help="Размер входа YOLO")
     parser.add_argument(
         "--max-det", type=int, default=100, help="Максимум детекций на кадр"
@@ -1379,6 +1471,10 @@ def parse_args() -> argparse.Namespace:
 def main(args: argparse.Namespace) -> None:
     if args.step < 1 or args.n_init < 1 or args.min_segment_frames < 1:
         raise ValueError("step, n-init and min-segment-frames must be positive")
+    if not 0.0 <= args.min_person_conf <= 1.0:
+        raise ValueError("min-person-conf must be between 0 and 1")
+    if args.min_person_aspect <= 0:
+        raise ValueError("min-person-aspect must be positive")
     if args.global_gap <= 0 or args.person_height <= 0:
         raise ValueError("global-gap and person-height must be positive")
     if args.max_graph_hops < 1:
