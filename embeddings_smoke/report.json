@@ -1,0 +1,25 @@
+{
+  "detector": "OpenCV MOG2 fallback",
+  "reid": null,
+  "reid_device": null,
+  "sample_step": 20,
+  "association_gap_sec": 8,
+  "cameras": [
+    {
+      "camera": 1,
+      "file": "camera_4_lots.mp4",
+      "fps": 20.003059741451846,
+      "frames": 523,
+      "local_segments": 0
+    },
+    {
+      "camera": 2,
+      "file": "camera_new_4 - Trim.mp4",
+      "fps": 20.021813649111873,
+      "frames": 514,
+      "local_segments": 0
+    }
+  ],
+  "total_tracks": 0,
+  "tracks": []
+}
