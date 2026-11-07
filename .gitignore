@@ -41,3 +41,6 @@ embeddings_smoke/
 # Данные
 data/
 datasets/
+
+# Бэкапы
+bkp/

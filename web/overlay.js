@@ -33,7 +33,7 @@
         if (next !== previous && next.frame !== previous.frame) { const ratio = (frame - previous.frame) / (next.frame - previous.frame); box = previous.box.map((value, index) => value + (next.box[index] - value) * ratio); }
         const [x1, y1, x2, y2] = box; const selected = shared.selectedTrack && Number(track.global_id) === Number(shared.selectedTrack.global_id);
         context.strokeStyle = selected ? '#ffd166' : '#28df85'; context.lineWidth = selected ? 5 : 3; context.strokeRect(x1, y1, x2 - x1, y2 - y1);
-        context.fillStyle = context.strokeStyle; context.font = 'bold 22px sans-serif'; context.fillText('ID ' + track.global_id, x1, Math.max(24, y1 - 8));
+        context.fillStyle = context.strokeStyle; context.font = 'bold 66px sans-serif'; context.fillText('ID ' + track.global_id, x1, Math.max(70, y1 - 20));
       });
     });
     requestAnimationFrame(draw);
