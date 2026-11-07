@@ -200,12 +200,13 @@ def process_camera(
     imgsz: int,
     max_frames: int,
     reid: ReID,
-) -> tuple[list[dict], float, int]:
+) -> tuple[list[dict], list[dict], float, int]:
     capture = cv2.VideoCapture(str(path))
     fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
     total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     tracker = Tracker(max_age=max(30, int(fps * 2)), n_init=3)
     segments = {}
+    embedding_records = []
     frame_number = 0
 
     while max_frames == 0 or frame_number < max_frames:
@@ -227,6 +228,17 @@ def process_camera(
                 )
             for item in tracker.update(detections):
                 key = item["local_id"]
+                if reid.extractor is not None:
+                    embedding_records.append(
+                        {
+                            "camera": camera,
+                            "local_id": key,
+                            "frame": frame_number,
+                            "embedding": [
+                                round(float(value), 8) for value in item["reid"]
+                            ],
+                        }
+                    )
                 segment = segments.setdefault(
                     key,
                     {
@@ -260,7 +272,7 @@ def process_camera(
         segment["reid"] /= np.linalg.norm(segment["reid"]) + 1e-8
         if segment["frames"] >= 3:
             valid_segments.append(segment)
-    return valid_segments, fps, total_frames
+    return valid_segments, embedding_records, fps, total_frames
 
 
 def merge_segments(segments: list[dict], gap: float) -> list[dict]:
@@ -350,14 +362,15 @@ def analyze(
     output_path.mkdir(parents=True, exist_ok=True)
     detector, detector_name = make_detector(model, conf, imgsz)
     reid_engine = ReID(bool(model) and reid_enabled, device)
-    segments, camera_metadata = [], []
+    segments, camera_metadata, embedding_records = [], [], []
 
     for camera, path in enumerate(files, 1):
         print(f"camera {camera}/{len(files)}: {path.name}", flush=True)
-        local, fps, total = process_camera(
+        local, local_embeddings, fps, total = process_camera(
             path, camera, detector, model, step, conf, imgsz, max_frames, reid_engine
         )
         segments.extend(local)
+        embedding_records.extend(local_embeddings)
         camera_metadata.append(
             {
                 "camera": camera,
@@ -381,6 +394,18 @@ def analyze(
     }
     (output_path / "report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
+    )
+    embeddings_report = {
+        "model": reid_engine.model_name,
+        "device": device if reid_engine.extractor else None,
+        "dimension": (
+            len(embedding_records[0]["embedding"]) if embedding_records else None
+        ),
+        "normalization": "L2",
+        "records": embedding_records,
+    }
+    (output_path / "embeddings.json").write_text(
+        json.dumps(embeddings_report, indent=2), encoding="utf-8"
     )
     with (output_path / "tracks.csv").open(
         "w", newline="", encoding="utf-8"
@@ -406,6 +431,7 @@ def analyze(
                 "local_segments": len(segments),
                 "total_tracks": len(tracks),
                 "output": str(output_path),
+                "embeddings": str(output_path / "embeddings.json"),
             },
             ensure_ascii=False,
         )
