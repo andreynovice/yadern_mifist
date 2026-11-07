@@ -37,7 +37,12 @@ def render(videos: str, report: str, output: str, hold: int = 0) -> None:
     data = json.loads(Path(report).read_text(encoding="utf-8"))
     output_path = Path(output)
     output_path.mkdir(parents=True, exist_ok=True)
-    files = sorted(Path(videos).glob("*.mp4"))
+    supported_suffixes = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
+    files = sorted(
+        path
+        for path in Path(videos).iterdir()
+        if path.is_file() and path.suffix.lower() in supported_suffixes
+    )
 
     for camera, source in enumerate(files, 1):
         capture = cv2.VideoCapture(str(source))

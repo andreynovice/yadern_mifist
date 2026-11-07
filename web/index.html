@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>People Tracking Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar"><div><strong>People Tracking</strong><span class="muted"> · multi-camera demo</span></div><span id="health" class="status">Проверка API…</span></header>
+    <main class="shell">
+      <section class="panel intro"><div><h1>Сквозные треки людей</h1><p class="muted">Подключите готовый результат или запустите обработку локального набора видео.</p></div><div class="actions"><button id="refreshJobs">Обновить</button><button id="importButton">Подключить результат</button><button id="newJob" class="primary">Новый анализ</button></div></section>
+      <section id="jobForm" class="panel hidden"><h2>Запустить анализ</h2><form id="createForm" class="form-grid"><label>Папка видео<input name="videos" value="data" required /></label><label>Модель<input name="model" value="yolo11m.pt" /></label><label>Шаг кадров<input name="step" type="number" min="1" value="5" /></label><label>Confidence<input name="conf" type="number" min="0" max="1" step="0.01" value="0.15" /></label><label>Gap, секунд<input name="gap" type="number" min="0" step="0.5" value="8" /></label><label>Устройство<select name="device"><option>cpu</option><option>cuda</option></select></label><label class="check"><input name="reid" type="checkbox" checked /> Использовать OSNet Re-ID</label><label class="check"><input name="render" type="checkbox" checked /> Создать видео с рамками</label><div class="form-actions"><button type="submit" class="primary">Запустить</button><button type="button" id="cancelJob">Отмена</button></div></form></section>
+      <section id="importForm" class="panel hidden"><h2>Подключить готовый результат</h2><form id="importResultForm" class="form-grid"><label>Папка результатов<input name="result_dir" placeholder="outputs_demo" required /></label><label>Папка видео, опционально<input name="videos" placeholder="data" /></label><label>Папка мировой проекции, опционально<input name="world_dir" placeholder="world_projection_output" /></label><div class="form-actions"><button type="submit" class="primary">Подключить</button><button type="button" id="cancelImport">Отмена</button></div></form></section>
+      <section id="jobs" class="panel"><h2>Задания</h2><div id="jobList" class="job-list"></div></section>
+      <section id="dashboard" class="hidden"><div class="stats" id="stats"></div><div class="workspace"><section class="panel video-panel"><div class="section-head"><h2>Камеры</h2><span id="videoHint" class="muted"></span></div><div id="videos" class="video-grid"></div><div class="player-controls"><button id="playAll">▶ Воспроизвести</button><input id="timeline" type="range" min="0" max="100" value="0" /><span id="timeLabel">00:00</span></div></section><section class="panel track-panel"><div class="section-head"><h2>Треки</h2><button id="clearTrack">Сбросить</button></div><div id="trackDetail" class="track-detail muted">Выберите трек</div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Начало</th><th>Конец</th><th>Камеры</th><th>Кадры</th></tr></thead><tbody id="tracks"></tbody></table></div></section></div><section class="panel world-panel"><div class="section-head"><h2>Мировая проекция</h2><span id="worldStatus" class="muted">Не загружена</span></div><div id="worldContent" class="world-content"></div></section></section>
+    </main><div id="toast" class="toast"></div><script src="/app.js" defer></script><script src="/overlay.js" defer></script>
+    <script src="/exports.js" defer></script>
+  </body>
+</html>

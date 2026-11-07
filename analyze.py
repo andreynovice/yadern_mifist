@@ -355,7 +355,12 @@ def analyze(
     reid_enabled: bool = True,
     device: str = "cpu",
 ) -> None:
-    files = sorted(Path(videos).glob("*.mp4"))
+    supported_suffixes = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
+    files = sorted(
+        path
+        for path in Path(videos).iterdir()
+        if path.is_file() and path.suffix.lower() in supported_suffixes
+    )
     if not files:
         raise FileNotFoundError(f"No MP4 files found in {videos}")
     output_path = Path(output)
