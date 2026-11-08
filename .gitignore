@@ -12,22 +12,6 @@ env/
 .DS_Store
 Thumbs.db
 
-# Модели и веса
-*.pth
-*.onnx
-*.engine
-*.ckpt
-
-# Видео и медиа
-*.mp4
-*.avi
-*.mov
-*.mkv
-*.webm
-videos/
-videos_*/
-*.mp3
-*.wav
 
 
 # Данные

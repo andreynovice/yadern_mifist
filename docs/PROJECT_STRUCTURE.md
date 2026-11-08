@@ -1,29 +1,5 @@
 # Структура проекта
 
-## Дерево шаблона hacathon_template-main
-
-~~~text
-hacathon_template-main/
-├── .gitignore
-├── README.md                         # пустой файл
-├── artifacts/
-│   ├── demo/README.md                # список материалов демонстрации
-│   └── test-results/
-│       ├── README.md                 # заготовка тестовых артефактов
-│       └── results.csv               # демонстрационная строка-заглушка
-├── config/example.env                # SAMPLE_RATE, SYMBOL_DURATION_MS, OUTPUT_DIRECTORY
-├── docs/
-│   ├── ARCHITECTURE.md               # пустые разделы архитектуры
-│   ├── LIMITATIONS.md                # пустые разделы ограничений
-│   ├── PROTOCOL.md                   # заготовка акустического протокола
-│   └── TEST_RESULTS.md               # пустая заготовка тестов
-└── src/README.md                     # placeholder платформенных реализаций
-~~~
-
-В шаблоне нет исходного кода в src, заполненного README, демонстрационных файлов, протокола передачи, тестов или реальных результатов измерений. results.csv содержит строку DELETE THIS EXAMPLE ROW и не является результатом тестирования.
-
-## Фактическое приложение в корне репозитория
-
 ~~~text
 .
 ├── server.py                         # FastAPI API и запуск заданий
@@ -40,8 +16,7 @@ hacathon_template-main/
 ├── requirements.txt                  # зависимости
 ├── data/                             # исходные видео, сейчас MKV
 ├── runs/                             # результаты запусков
-├── web/                              # HTML, CSS и JavaScript интерфейса
-└── hacathon_template-main/           # внешний шаблон документации
+└── web/                              # HTML, CSS и JavaScript интерфейса
 ~~~
 
 ## Результат запуска
