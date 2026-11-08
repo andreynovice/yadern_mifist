@@ -39,3 +39,5 @@ results/
 # Данные
 data/
 datasets/
+
+embeddings_smoke/
