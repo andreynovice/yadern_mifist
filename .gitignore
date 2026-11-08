@@ -41,3 +41,6 @@ data/
 datasets/
 
 embeddings_smoke/
+tracked/
+projections/
+bkp/

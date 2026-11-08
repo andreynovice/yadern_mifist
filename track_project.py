@@ -540,6 +540,10 @@ def process_camera(
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    start_frame = max(0, int(round(args.start_sec * fps)))
+    end_frame = None if args.end_sec is None else max(start_frame, int(round(args.end_sec * fps)))
+    if start_frame:
+        capture.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     progress_interval = max(1, round(fps * 10))
     updates_per_second = fps / args.step
     max_age = args.track_max_age
@@ -554,8 +558,9 @@ def process_camera(
     )
     segments: dict[str, dict[str, Any]] = {}
     embeddings = []
-    frame_number = 0
-    while args.max_frames == 0 or frame_number < args.max_frames:
+    frame_number = start_frame
+    processed_frames = 0
+    while (args.max_frames == 0 or processed_frames < args.max_frames) and (end_frame is None or frame_number < end_frame):
         ok, image = capture.read()
         if not ok:
             break
@@ -614,6 +619,7 @@ def process_camera(
                 flush=True,
             )
         frame_number += 1
+        processed_frames += 1
     capture.release()
     valid_segments = []
     for segment in segments.values():
@@ -1221,13 +1227,19 @@ def render_videos(
             camera["fps"] / args.step,
             (args.map_width_px, args.map_height_px),
         )
-        frame_number = 0
-        while args.max_frames == 0 or frame_number < args.max_frames:
+        start_frame = max(0, int(round(args.start_sec * camera["fps"])))
+        end_frame = None if args.end_sec is None else max(start_frame, int(round(args.end_sec * camera["fps"])))
+        if start_frame:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        frame_number = start_frame
+        processed_frames = 0
+        while (args.max_frames == 0 or processed_frames < args.max_frames) and (end_frame is None or frame_number < end_frame):
             ok, image = capture.read()
             if not ok:
                 break
             if frame_number % args.step != 0:
                 frame_number += 1
+                processed_frames += 1
                 continue
             tracked_image = image.copy()
             for box, global_id in observations_by_camera.get(camera_id, {}).get(
@@ -1283,13 +1295,14 @@ def render_videos(
             tracked_writer.write(tracked_image)
             projection_writer.write(projection)
             frame_number += 1
+            processed_frames += 1
         capture.release()
         tracked_writer.release()
         projection_writer.release()
         print(f"camera {camera_id}: {tracked_path} and {projection_path}", flush=True)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--videos", default="videos", help="Папка с MP4")
     parser.add_argument("--output", default="outputs_unified", help="Папка результата")
@@ -1314,6 +1327,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-frames", type=int, default=0, help="Лимит кадров; 0 = весь файл"
     )
+    parser.add_argument("--start-sec", type=float, default=0.0, help="Начало выбранного интервала, секунды")
+    parser.add_argument("--end-sec", type=float, default=None, help="Конец выбранного интервала, секунды (не включается)")
     parser.add_argument(
         "--conf", type=float, default=0.15, help="Порог confidence YOLO"
     )
@@ -1449,10 +1464,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Отключить OSNet и использовать HSV baseline",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main(args: argparse.Namespace) -> None:
+    if args.start_sec < 0 or (args.end_sec is not None and args.end_sec < 0):
+        raise ValueError("start-sec and end-sec must be non-negative")
+    if args.end_sec is not None and args.end_sec < args.start_sec:
+        raise ValueError("end-sec must be greater than or equal to start-sec")
     if args.step < 1 or args.n_init < 1 or args.min_segment_frames < 1:
         raise ValueError("step, n-init and min-segment-frames must be positive")
     if not 0.0 <= args.min_person_conf <= 1.0:
