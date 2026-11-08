@@ -13,10 +13,5 @@ env/
 Thumbs.db
 
 
-
-# Данные
-data/
-datasets/
-
 *.log
 bkp/
