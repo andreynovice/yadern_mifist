@@ -29,18 +29,10 @@ videos_*/
 *.mp3
 *.wav
 
-# Результаты / выходы
-outputs*/
-rendered*/
-runs/
-results/
-*.log
 
 # Данные
 data/
 datasets/
 
-embeddings_smoke/
-tracked/
-projections/
+*.log
 bkp/
