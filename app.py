@@ -11,7 +11,7 @@ import cv2
 
 try:
     from PIL import Image, ImageTk
-except ImportError:  # pragma: no cover
+except ImportError:
     Image = None
     ImageTk = None
 

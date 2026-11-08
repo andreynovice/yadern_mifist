@@ -18,10 +18,10 @@ from ultralytics import YOLO
 
 DEFAULT_TABLE_IMAGE_POINTS = np.array(
     [
-        [689.0, 618.0],  # world (0, 0): left/far corner
-        [1603.0, 499.0],  # world (2.74, 0): right/far corner
-        [1888.0, 833.0],  # world (2.74, 1.525): right/near corner
-        [751.0, 1081.0],  # world (0, 1.525): left/near corner
+        [689.0, 618.0],
+        [1603.0, 499.0],
+        [1888.0, 833.0],
+        [751.0, 1081.0],
     ],
     dtype=np.float32,
 )

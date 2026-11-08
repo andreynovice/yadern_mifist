@@ -158,9 +158,7 @@ def box_iou(
         0, intersection_y2 - intersection_y1
     )
     first_area = max(1, first_x2 - first_x1) * max(1, first_y2 - first_y1)
-    second_area = max(1, second_x2 - second_x1) * max(
-        1, second_y2 - second_y1
-    )
+    second_area = max(1, second_x2 - second_x1) * max(1, second_y2 - second_y1)
     return intersection / (first_area + second_area - intersection)
 
 
@@ -173,9 +171,7 @@ def overlap_fraction(
         0, min(first_y2, second_y2) - max(first_y1, second_y1)
     )
     first_area = max(1, first_x2 - first_x1) * max(1, first_y2 - first_y1)
-    second_area = max(1, second_x2 - second_x1) * max(
-        1, second_y2 - second_y1
-    )
+    second_area = max(1, second_x2 - second_x1) * max(1, second_y2 - second_y1)
     return intersection / max(1, min(first_area, second_area))
 
 
@@ -194,16 +190,18 @@ def likely_duplicate(first: dict[str, Any], second: dict[str, Any]) -> bool:
     second_width = max(1, second_box[2] - second_box[0])
     first_height = max(1, first_box[3] - first_box[1])
     second_height = max(1, second_box[3] - second_box[1])
-    first_center = ((first_box[0] + first_box[2]) / 2, (first_box[1] + first_box[3]) / 2)
+    first_center = (
+        (first_box[0] + first_box[2]) / 2,
+        (first_box[1] + first_box[3]) / 2,
+    )
     second_center = (
         (second_box[0] + second_box[2]) / 2,
         (second_box[1] + second_box[3]) / 2,
     )
-    return (
-        abs(first_center[0] - second_center[0])
-        <= 0.85 * max(first_width, second_width)
-        and abs(first_center[1] - second_center[1])
-        <= 0.65 * max(first_height, second_height)
+    return abs(first_center[0] - second_center[0]) <= 0.85 * max(
+        first_width, second_width
+    ) and abs(first_center[1] - second_center[1]) <= 0.65 * max(
+        first_height, second_height
     )
 
 
@@ -413,8 +411,6 @@ def normalize_graph(graph: dict[str, Any]) -> dict[str, Any]:
             "state_transitions": transitions,
         }
 
-    # Keep old {"2": ["1"], ...} files readable while using the new
-    # visibility-state semantics for all newly created runs.
     camera_edges = {
         str(camera): [str(target) for target in targets]
         for camera, targets in graph.items()
@@ -769,8 +765,6 @@ def state_path_compatible(
             (left, right) for left, right in zip(events, events[1:]) if right > left
         ]
     reachable: set[str] | None = None
-    # One camera route can require one extra state edge for an overlap state,
-    # e.g. S2 -> S21 -> S13 -> S35 -> S354 -> S4.
     state_hops = max_hops + 1
     for left, right in intervals:
         sample = left if left == right else (left + right) / 2.0
@@ -876,7 +870,6 @@ def merge_segments(
             first_start = first.get("sync_start_time", first["start_time"])
             second_start = second.get("sync_start_time", second["start_time"])
             if first["camera"] == second["camera"]:
-                # A local camera track can only continue forward in time.
                 if first_start > second_start:
                     first, second = second, first
                     candidate_first_index, candidate_second_index = (
@@ -889,9 +882,6 @@ def merge_segments(
                 threshold = args.local_reid_threshold
                 candidates = local_candidates
             else:
-                # Different cameras may observe the person at the same time.
-                # The state graph, rather than an end-to-start rule, decides
-                # whether this pair can belong to one person.
                 if interval_distance(first, second) > args.global_gap:
                     continue
                 if not state_path_compatible(
@@ -932,17 +922,12 @@ def merge_segments(
         del members[second_root]
         return True
 
-    # Close same-camera fragments first. Sorting by temporal distance prevents
-    # a high-similarity, long-range false match from swallowing a nearby track.
     for candidate in sorted(
         local_candidates,
         key=lambda item: (item["time_gap"], -item["score"]),
     ):
         merge_candidate(candidate)
 
-    # Cross-camera associations are one-to-one for each camera pair. This
-    # prevents one local segment from absorbing several visually similar
-    # segments before the correct overlapping observation is considered.
     from scipy.optimize import linear_sum_assignment
 
     camera_pair_rank: dict[tuple[str, str], int] = {}
@@ -1385,7 +1370,6 @@ def parse_args() -> argparse.Namespace:
         default=2.0,
         help="Допустимое перекрытие сегментов, сек",
     )
-    # 2 -> 1 -> 3 -> 5 -> 4 is the longest route in the default graph.
     parser.add_argument(
         "--max-graph-hops", type=int, default=4, help="Максимум рёбер пути в графе"
     )
