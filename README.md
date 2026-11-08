@@ -1,5 +1,7 @@
 # People Tracking
 
+Поддерживаются исходные видео в форматах MKV и MP4. Остальные файлы в папке входных данных игнорируются.
+
 Основной запуск проекта выполняется через web-интерфейс. Конвейер track_project.py запускается сервером и создаёт unified-результат с глобальными треками, проекциями и готовыми видео с bbox.
 
 ## Запуск web-интерфейса
@@ -10,7 +12,7 @@
 
 ## Запуск unified-конвейера вручную
 
-Пример: python track_project.py --videos videos --output outputs_unified --model yolo11m.pt --device cpu --start-sec 10 --end-sec 30
+Пример: python track_project.py --videos data --output outputs_unified --model yolo11m.pt --device cpu --step 20 --start-sec 60 --end-sec 90
 
 Результат содержит tracks_projection.json, embeddings.json, tracked/*_tracked.mp4 и projections/*_projection.mp4. В web-интерфейс подключаются только каталоги с unified JSON и каталогом tracked; legacy report.json не поддерживается. Видео из tracked уже содержат bbox, поэтому интерфейс не рисует поверх них дополнительный overlay.
 

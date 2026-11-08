@@ -6,6 +6,7 @@ import argparse
 import json
 import multiprocessing
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,22 @@ import cv2
 import numpy as np
 
 from analyze import ReID, appearance
+
+
+def encode_browser_video(source: Path, target: Path) -> None:
+    """Transcode an OpenCV temporary file to a browser-compatible MP4."""
+    try:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError as exc:
+        raise RuntimeError("imageio-ffmpeg is required to create browser-compatible videos") from exc
+    command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
+               "-an", "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+               "-movflags", "+faststart", str(target)]
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(f"FFmpeg H.264 encoding failed: {completed.stderr.strip()}")
+    source.unlink(missing_ok=True)
 
 DEFAULT_GRAPH = {
     "camera_edges": {
@@ -448,7 +465,7 @@ def resolve_camera_ids(files: list[Path], explicit: str | None) -> list[str]:
     if explicit:
         camera_ids = [value.strip() for value in explicit.split(",") if value.strip()]
         if len(camera_ids) != len(files):
-            raise ValueError("--camera-ids must contain one ID per input MP4")
+            raise ValueError("--camera-ids must contain one ID per input video")
         if len(set(camera_ids)) != len(camera_ids):
             raise ValueError("--camera-ids must contain unique camera IDs")
         return camera_ids
@@ -1215,18 +1232,22 @@ def render_videos(
         capture = cv2.VideoCapture(str(source))
         tracked_path = tracked_dir / f"{source.stem}_tracked.mp4"
         projection_path = projection_dir / f"{source.stem}_projection.mp4"
+        tracked_temp = tracked_dir / f".{source.stem}_tracked.mp4v.mp4"
+        projection_temp = projection_dir / f".{source.stem}_projection.mp4v.mp4"
         tracked_writer = cv2.VideoWriter(
-            str(tracked_path),
+            str(tracked_temp),
             cv2.VideoWriter_fourcc(*"mp4v"),
             camera["fps"] / args.step,
             (camera["width"], camera["height"]),
         )
         projection_writer = cv2.VideoWriter(
-            str(projection_path),
+            str(projection_temp),
             cv2.VideoWriter_fourcc(*"mp4v"),
             camera["fps"] / args.step,
             (args.map_width_px, args.map_height_px),
         )
+        if not tracked_writer.isOpened() or not projection_writer.isOpened():
+            raise RuntimeError(f"Could not open video writers for camera {camera_id}")
         start_frame = max(0, int(round(args.start_sec * camera["fps"])))
         end_frame = None if args.end_sec is None else max(start_frame, int(round(args.end_sec * camera["fps"])))
         if start_frame:
@@ -1299,12 +1320,14 @@ def render_videos(
         capture.release()
         tracked_writer.release()
         projection_writer.release()
+        encode_browser_video(tracked_temp, tracked_path)
+        encode_browser_video(projection_temp, projection_path)
         print(f"camera {camera_id}: {tracked_path} and {projection_path}", flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--videos", default="videos", help="Папка с MP4")
+    parser.add_argument("--videos", default="data", help="Input folder containing MKV or MP4 videos")
     parser.add_argument("--output", default="outputs_unified", help="Папка результата")
     parser.add_argument("--model", default="yolo11m.pt", help="Файл весов YOLO")
     parser.add_argument("--device", default="cpu", help="cpu или cuda")
@@ -1314,7 +1337,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Параллельные устройства для камер, например cuda:0,cuda:1",
     )
     parser.add_argument(
-        "--camera-ids", default=None, help="ID камер через запятую, в порядке MP4"
+        "--camera-ids", default=None, help="Camera IDs in input video order"
     )
     parser.add_argument(
         "--camera-offsets",
@@ -1322,13 +1345,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Синхронизация камер: 1=0,2=1.25 (секунды)",
     )
     parser.add_argument(
-        "--step", type=int, default=5, help="Обрабатывать каждый N-й кадр"
+        "--step", type=int, default=20, help="Process every Nth frame"
     )
     parser.add_argument(
         "--max-frames", type=int, default=0, help="Лимит кадров; 0 = весь файл"
     )
-    parser.add_argument("--start-sec", type=float, default=0.0, help="Начало выбранного интервала, секунды")
-    parser.add_argument("--end-sec", type=float, default=None, help="Конец выбранного интервала, секунды (не включается)")
+    parser.add_argument("--start-sec", type=float, default=60.0, help="Start time in seconds")
+    parser.add_argument("--end-sec", type=float, default=90.0, help="Exclusive end time in seconds")
     parser.add_argument(
         "--conf", type=float, default=0.15, help="Порог confidence YOLO"
     )
@@ -1482,9 +1505,14 @@ def main(args: argparse.Namespace) -> None:
         raise ValueError("global-gap and person-height must be positive")
     if args.max_graph_hops < 1:
         raise ValueError("max-graph-hops must be positive")
-    files = sorted(Path(args.videos).glob("*.mp4"))
+    video_dir = Path(args.videos)
+    supported_extensions = {".mkv", ".mp4"}
+    files = sorted(
+        (path for path in video_dir.iterdir() if path.is_file() and path.suffix.lower() in supported_extensions),
+        key=lambda path: path.name.casefold(),
+    ) if video_dir.is_dir() else []
     if not files:
-        raise FileNotFoundError(f"No MP4 files found in {args.videos}")
+        raise FileNotFoundError(f"No MKV or MP4 files found in {args.videos}")
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     graph_path = Path(args.graph)

@@ -21,11 +21,11 @@
       canvas.style.width = drawnWidth + 'px'; canvas.style.height = drawnHeight + 'px';
       const context = canvas.getContext('2d'); context.setTransform(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, width, height);
       const camera = Number(video.dataset.camera);
-      const metadata = (shared.report.cameras || []).find((item) => item.camera === camera) || {};
+      const metadata = (shared.report.cameras || []).find((item) => String(item.camera) === String(camera)) || {};
       const frame = Math.round(video.currentTime * (metadata.fps || 25));
       (shared.report.tracks || []).forEach((track) => {
         if (shared.selectedTrack && Number(track.global_id) !== Number(shared.selectedTrack.global_id)) return;
-        const observations = (track.boxes || []).filter((item) => item.camera === camera).sort((a, b) => a.frame - b.frame);
+        const observations = (track.boxes || []).filter((item) => String(item.camera) === String(camera)).sort((a, b) => a.frame - b.frame);
         let previous = null; let next = null;
         for (const item of observations) { if (item.frame <= frame) previous = item; if (item.frame >= frame) { next = item; break; } }
         if (!previous || !next || frame - previous.frame > 8 || next.frame - frame > 8) return;

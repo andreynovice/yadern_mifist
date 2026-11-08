@@ -1,0 +1,42 @@
+# Secrets and local configuration
+.env
+*.key
+*.pem
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Generic build output
+build/
+dist/
+out/
+target/
+bin/
+obj/
+
+# Dependencies and caches
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.gradle/
+
+# Received files are generated during demonstrations
+examples/output/*
+!examples/output/.gitkeep
+
+# Keep large demo media outside Git unless intentionally included
+artifacts/demo/*.mp4
+artifacts/demo/*.mov
+artifacts/demo/*.mkv
+artifacts/demo/*.wav
+

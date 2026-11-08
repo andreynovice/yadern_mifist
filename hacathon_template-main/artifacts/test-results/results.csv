@@ -1,0 +1,3 @@
+test_id,timestamp_utc,commit,file_name,file_size_bytes,duration_seconds,distance_meters,noise_condition,noise_level_db,attempt,success,checksum_match,device_tx,device_rx,notes
+example-001,2026-01-01T00:00:00Z,replace-me,sample.txt,128,1.23,1.0,quiet-room,35,1,true,true,replace-me,replace-me,DELETE THIS EXAMPLE ROW
+

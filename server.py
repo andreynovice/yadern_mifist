@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,27 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent
 RUNS_ROOT = ROOT / "runs"
 RUNS_ROOT.mkdir(exist_ok=True)
+logger = logging.getLogger("people_tracking")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+_runs_lock = threading.Lock()
+
+
+def next_experiment_number() -> int:
+    numbers = [int(path.name) for path in RUNS_ROOT.iterdir() if path.is_dir() and path.name.isdigit()]
+    numbers.extend(
+        int(job["experiment_number"])
+        for job in store.all()
+        if str(job.get("experiment_number", "")).isdigit()
+    )
+    return max(numbers, default=0) + 1
+
+
+def allocate_experiment() -> tuple[int, Path]:
+    with _runs_lock:
+        number = next_experiment_number()
+        path = RUNS_ROOT / str(number)
+        path.mkdir(parents=True, exist_ok=False)
+        return number, path
 
 
 def utc_now() -> str:
@@ -26,13 +48,13 @@ def utc_now() -> str:
 class JobCreate(BaseModel):
     videos: str
     model: str = "yolo11m.pt"
-    step: int = Field(5, ge=1)
+    step: int = Field(20, ge=1)
     conf: float = Field(0.15, ge=0.0, le=1.0)
     imgsz: int = Field(1280, ge=32)
     gap: float = Field(60.0, ge=0.0)
     max_frames: int = Field(0, ge=0)
-    start_sec: float = Field(0.0, ge=0.0)
-    end_sec: float | None = Field(None, ge=0.0)
+    start_sec: float = Field(60.0, ge=0.0)
+    end_sec: float | None = Field(90.0, ge=0.0)
     device: str = "cpu"
     reid: bool = True
 
@@ -50,7 +72,7 @@ class JobStore:
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         job_id = uuid.uuid4().hex[:12]
-        job = {"id": job_id, "name": data.get("name") or f"Tracking job {job_id}",
+        job = {"id": job_id, "name": data.get("name") or f"Эксперимент {data.get('experiment_number', job_id)}",
                "status": "queued", "stage": "queued", "created_at": utc_now(),
                "updated_at": utc_now(), **data}
         with self._lock:
@@ -97,6 +119,30 @@ def directory(value: str) -> Path:
     return path
 
 
+def result_directory(value: str) -> Path:
+    """Accept a result root or its tracked/ subdirectory."""
+    path = directory(value)
+    if path.name.lower() == "tracked" and (path.parent / "tracks_projection.json").is_file():
+        return path.parent
+    if not (path / "tracks_projection.json").is_file() and (path.parent / "tracks_projection.json").is_file():
+        return path.parent
+    return path
+
+
+def tracked_video_path(result_dir: Path, camera: dict[str, Any], index: int) -> Path | None:
+    tracked_dir = result_dir / "tracked"
+    if not tracked_dir.is_dir():
+        return None
+    filename = Path(str(camera.get("file", "")))
+    candidates = [
+        tracked_dir / filename.name,
+        tracked_dir / f"{filename.stem}_tracked.mp4",
+        tracked_dir / f"{filename.stem}_tracked_tracked.mp4",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
 def read_unified(job: dict[str, Any]) -> dict[str, Any]:
     path = Path(job["result_dir"]) / "tracks_projection.json"
     if not path.is_file():
@@ -106,6 +152,7 @@ def read_unified(job: dict[str, Any]) -> dict[str, Any]:
 
 def run_analysis(job_id: str, request: JobCreate, output_dir: Path) -> None:
     try:
+        logger.info("job=%s started analysis output=%s videos=%s", job_id, output_dir, request.videos)
         store.update(job_id, status="running", stage="analysis")
         import track_project
         argv = ["--videos", request.videos, "--output", str(output_dir), "--model", request.model,
@@ -118,7 +165,9 @@ def run_analysis(job_id: str, request: JobCreate, output_dir: Path) -> None:
             argv.append("--no-reid")
         track_project.main(track_project.parse_args(argv))
         store.update(job_id, status="completed", stage="completed")
+        logger.info("job=%s completed output=%s", job_id, output_dir)
     except Exception as exc:
+        logger.exception("job=%s failed", job_id)
         store.update(job_id, status="failed", stage="error", error=str(exc))
 
 
@@ -137,17 +186,17 @@ def create_job(request: JobCreate) -> dict[str, Any]:
     videos = directory(request.videos)
     if request.end_sec is not None and request.end_sec < request.start_sec:
         raise HTTPException(status_code=400, detail="end_sec must be greater than or equal to start_sec")
-    output_dir = RUNS_ROOT / uuid.uuid4().hex[:12]
-    output_dir.mkdir(parents=True, exist_ok=True)
+    experiment_number, output_dir = allocate_experiment()
     job = store.create({"kind": "analysis", "videos": str(videos), "result_dir": str(output_dir),
-                        "params": model_data(request)})
+                        "params": model_data(request), "experiment_number": experiment_number})
+    logger.info("job=%s queued name=%s output=%s", job["id"], job["name"], output_dir)
     store.submit(lambda: run_analysis(job["id"], request, output_dir))
     return job
 
 
 @app.post("/api/jobs/import")
 def import_job(request: ImportJob) -> dict[str, Any]:
-    result_dir = directory(request.result_dir)
+    result_dir = result_directory(request.result_dir)
     unified = result_dir / "tracks_projection.json"
     if not unified.is_file():
         if (result_dir / "report.json").is_file():
@@ -156,10 +205,15 @@ def import_job(request: ImportJob) -> dict[str, Any]:
     if not (result_dir / "tracked").is_dir():
         raise HTTPException(status_code=400, detail="Unified result must contain tracked/ with bbox videos")
     report = json.loads(unified.read_text(encoding="utf-8"))
-    return store.create({"kind": "import", "name": request.name or result_dir.name,
-                         "result_dir": str(result_dir), "videos": None,
-                         "status": "completed", "stage": "completed",
-                         "camera_count": len(report.get("cameras", []))})
+    with _runs_lock:
+        experiment_number = next_experiment_number()
+        job = store.create({"kind": "import", "name": request.name or f"Эксперимент {experiment_number}",
+                            "result_dir": str(result_dir), "videos": None,
+                            "status": "completed", "stage": "completed",
+                            "camera_count": len(report.get("cameras", [])),
+                            "experiment_number": experiment_number})
+    logger.info("job=%s imported name=%s result=%s cameras=%s", job["id"], job["name"], result_dir, len(report.get("cameras", [])))
+    return job
 
 
 @app.get("/api/jobs/{job_id}")
@@ -203,8 +257,7 @@ def get_cameras(job_id: str) -> dict[str, Any]:
     for index, camera in enumerate(report.get("cameras", []), 1):
         item = dict(camera)
         item["index"] = index
-        filename = Path(item.get("file", ""))
-        item["tracked_available"] = (Path(job["result_dir"]) / "tracked" / f"{filename.stem}_tracked.mp4").is_file()
+        item["tracked_available"] = tracked_video_path(Path(job["result_dir"]), item, index) is not None
         cameras.append(item)
     return {"cameras": cameras}
 
@@ -216,10 +269,10 @@ def get_video(job_id: str, camera_index: int) -> FileResponse:
     cameras = report.get("cameras", [])
     if camera_index < 1 or camera_index > len(cameras):
         raise HTTPException(status_code=404, detail="Camera not found")
-    filename = Path(cameras[camera_index - 1].get("file", ""))
-    path = Path(job["result_dir"]) / "tracked" / f"{filename.stem}_tracked.mp4"
-    if not path.is_file():
+    path = tracked_video_path(Path(job["result_dir"]), cameras[camera_index - 1], camera_index)
+    if path is None:
         raise HTTPException(status_code=404, detail="Tracked camera video not found")
+    logger.info("video request job=%s camera=%s path=%s size=%s", job_id, camera_index, path, path.stat().st_size)
     return FileResponse(path, media_type="video/mp4")
 
 
